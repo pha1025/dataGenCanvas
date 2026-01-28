@@ -13,8 +13,10 @@
           <el-form label-position="top" size="large">
             <el-form-item label="生成器类型">
               <el-select v-model="generatorType" placeholder="请选择" style="width: 100%">
-                <el-option label="交易KPI支付数据 (TradeKPI)" value="tradeKpiPayment" />
-                <el-option label="客户基础信息 (Customer)" value="customerInfo" />
+                <el-option label="中小业绩统计" value="tradeKpiPayment" />
+                <el-option label="中小客户盘点" value="customerReviewExpire" />
+                <el-option label="财代业绩统计" value="csOrderPayment" />
+                <el-option label="财代账套到期" value="csBoardAuthMonthly" />
               </el-select>
             </el-form-item>
 
@@ -100,8 +102,21 @@
                 <el-collapse-item name="sqlContent">
                   <template #title>
                     <div class="collapse-title">
-                      <el-icon style="margin-right: 5px"><Document /></el-icon>
-                      <span>查看生成的 SQL 语句 (共 {{ result.sqls.length }} 条)</span>
+                      <div class="title-left">
+                        <el-icon style="margin-right: 5px"><Document /></el-icon>
+                        <span>查看生成的 SQL 语句 (共 {{ result.sqls.length }} 条)</span>
+                      </div>
+                      <el-button
+                          type="primary"
+                          link
+                          size="small"
+                          class="copy-btn"
+                          @click.stop="handleCopySql"
+                          style="margin-right: 20px"
+                      >
+                        <el-icon style="margin-right: 4px"><CopyDocument /></el-icon>
+                        一键复制
+                      </el-button>
                     </div>
                   </template>
 
@@ -127,7 +142,7 @@
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
-  EditPen, Location, VideoPlay, Monitor, Document
+  EditPen, Location, VideoPlay, Monitor, Document, CopyDocument
 } from '@element-plus/icons-vue'
 import { generateData } from '@/api/generator'
 
@@ -178,6 +193,18 @@ const handleGenerate = async () => {
     console.error(error)
   } finally {
     loading.value = false
+  }
+}
+
+const handleCopySql = async () => {
+  if (!joinedSqls.value) return
+  
+  try {
+    await navigator.clipboard.writeText(joinedSqls.value)
+    ElMessage.success('复制成功')
+  } catch (err) {
+    console.error('Failed to copy: ', err)
+    ElMessage.error('复制失败，请手动选择复制')
   }
 }
 </script>
@@ -257,8 +284,25 @@ const handleGenerate = async () => {
 .collapse-title {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding-right: 15px;
   font-weight: bold;
   color: #606266;
+}
+
+.title-left {
+  display: flex;
+  align-items: center;
+}
+
+.copy-btn {
+  font-weight: normal;
+  margin-left: 10px;
+}
+
+.copy-btn:hover {
+  opacity: 0.8;
 }
 
 :deep(.el-collapse) {
