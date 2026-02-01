@@ -10,24 +10,69 @@
             </div>
           </template>
 
+          <el-tabs v-model="activeTab" class="generator-tabs" @tab-change="handleTabChange">
+            <el-tab-pane label="中小" name="sme" />
+            <el-tab-pane label="财代" name="fiscal" />
+          </el-tabs>
+
           <el-form label-position="top" size="large">
             <el-form-item label="生成器类型">
               <el-select v-model="generatorType" placeholder="请选择" style="width: 100%">
-                <el-option label="中小业绩统计" value="tradeKpiPayment" />
-                <el-option label="中小客户盘点" value="customerReviewExpire" />
-                <el-option label="财代业绩统计" value="csOrderPayment" />
-                <el-option label="财代账套到期" value="csBoardAuthMonthly" />
+                <template v-if="activeTab === 'sme'">
+                  <el-option label="中小业绩统计" value="tradeKpiPayment" />
+                  <el-option label="中小客户盘点" value="customerReviewExpire" />
+                </template>
+                <template v-else>
+                  <el-option label="财代业绩统计" value="csOrderPayment" />
+                  <el-option label="财代账套到期" value="csBoardAuthMonthly" />
+                </template>
               </el-select>
             </el-form-item>
 
-            <el-form-item label="目标区域代码 (Region Code)">
-              <el-input
+            <el-form-item label="选择模式">
+              <el-radio-group v-model="selectionMode">
+                <el-radio value="region">按地区</el-radio>
+                <el-radio value="customerManager">按客户经理ID</el-radio>
+              </el-radio-group>
+            </el-form-item>
+
+            <el-form-item v-if="selectionMode === 'region'" label="目标区域代码 (Region Code)">
+              <el-select
                   v-model="regionCode"
-                  placeholder="例如: 004012022"
+                  placeholder="请选择地区"
                   clearable
+                  style="width: 100%"
               >
-                <template #prefix><el-icon><Location /></el-icon></template>
-              </el-input>
+                <el-option
+                  v-for="item in currentRegionOptions"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
+            </el-form-item>
+
+            <template v-if="selectionMode === 'customerManager'">
+              <el-form-item label="客户经理ID (Customer Manage ID)">
+                <el-input
+                    v-model="customerManageId"
+                    placeholder="请输入客户经理ID"
+                    clearable
+                >
+                  <template #prefix><el-icon><User /></el-icon></template>
+                </el-input>
+              </el-form-item>
+            </template>
+
+            <el-form-item label="结束月份 (End Date Month)">
+              <el-date-picker
+                  v-model="endDateMonth"
+                  type="month"
+                  placeholder="选择月份 (yyyy-MM)"
+                  format="YYYY-MM"
+                  value-format="YYYY-MM"
+                  style="width: 100%"
+              />
             </el-form-item>
 
             <el-form-item label="生成数量">
@@ -139,47 +184,114 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
-  EditPen, Location, VideoPlay, Monitor, Document, CopyDocument
+  EditPen, Location, VideoPlay, Monitor, Document, CopyDocument, User
 } from '@element-plus/icons-vue'
 import { generateData } from '@/api/generator'
 
 // --- 状态管理 ---
+const activeTab = ref('sme')
+const selectionMode = ref('region')
 const generatorType = ref('tradeKpiPayment')
 const regionCode = ref('')
+const customerManageId = ref('')
+const endDateMonth = ref('')
 const count = ref(1)
 const executeInsert = ref(false)
 const loading = ref(false)
 const result = ref(null)
 
+// 监听选择模式变化，清空互斥参数
+watch(selectionMode, (newMode) => {
+  if (newMode === 'region') {
+    customerManageId.value = ''
+  } else if (newMode === 'customerManager') {
+    regionCode.value = ''
+  }
+})
+
+// 地区选项数据
+const regionOptionsMap = {
+  sme: [
+    { label: '河北大区 (004012022)', value: '004012022' },
+    { label: '广东大区 (004012020)', value: '004012020' },
+    { label: '上海中小 (004012003)', value: '004012003' },
+    { label: '广州中小 (004012004)', value: '004012004' },
+    { label: '杭州中小 (004012005)', value: '004012005' },
+    { label: '成都中小 (004012006)', value: '004012006' },
+  ],
+  fiscal: [
+    { label: '河北大区 (004011006)', value: '004011006' },
+    { label: '浙江大区 (004011009)', value: '004011009' },
+    { label: '上海财代 (004011003)', value: '004011003' },
+    { label: '广州财代 (004011004)', value: '004011004' },
+    { label: '杭州财代 (004011005)', value: '004011005' },
+    { label: '成都财代 (004011006)', value: '004011006' },
+  ]
+}
+
 // 折叠面板控制
 const activeCollapseNames = ref([])
 
 // --- 计算属性 ---
+const currentRegionOptions = computed(() => {
+  return regionOptionsMap[activeTab.value] || []
+})
+
 const joinedSqls = computed(() => {
   if (!result.value || !result.value.sqls) return ''
   return result.value.sqls.join(';\n\n') + ';'
 })
 
 // --- 方法 ---
+const handleTabChange = (name) => {
+  // 切换 tab 时重置部分参数，并根据 tab 设置默认生成器类型
+  if (name === 'sme') {
+    generatorType.value = 'tradeKpiPayment'
+  } else {
+    generatorType.value = 'csOrderPayment'
+  }
+  regionCode.value = ''
+  customerManageId.value = ''
+  endDateMonth.value = ''
+  result.value = null
+}
+
 const handleGenerate = async () => {
-  if (!regionCode.value) {
-    ElMessage.warning('请输入地区代码')
+  // 校验
+  if (selectionMode.value === 'region' && !regionCode.value) {
+    ElMessage.warning('请选择地区代码')
     return
   }
+  if (selectionMode.value === 'customerManager' && !customerManageId.value) {
+    ElMessage.warning('请输入客户管理ID')
+    return
+  }
+
   loading.value = true
   result.value = null
   activeCollapseNames.value = []
 
+  // 构建请求参数
+  const params = {
+    generatorName: generatorType.value,
+    count: count.value,
+    regionCode: regionCode.value || '',
+    executeInsert: executeInsert.value
+  }
+
+  // 拓展字段：当存在客户管理ID或结束月份时，传入 extraParams
+  if (customerManageId.value || endDateMonth.value) {
+    params.extraParams = {
+      customerManageId: customerManageId.value || '',
+      endDateMonth: endDateMonth.value || ''
+    }
+  }
+
   try {
-    const res = await generateData({
-      generatorName: generatorType.value,
-      count: count.value,
-      regionCode: regionCode.value,
-      executeInsert: executeInsert.value
-    })
+    const res = await generateData(params)
     
     result.value = res
 
@@ -189,7 +301,6 @@ const handleGenerate = async () => {
       ElMessage.error('执行失败: ' + res.message)
     }
   } catch (error) {
-    // 错误已在 request.js 中处理，这里只需停止 loading
     console.error(error)
   } finally {
     loading.value = false
@@ -212,6 +323,14 @@ const handleCopySql = async () => {
 <style scoped>
 .function-wrapper {
   height: 100%;
+}
+
+.generator-tabs {
+  margin-bottom: 20px;
+}
+
+:deep(.el-tabs__nav-wrap::after) {
+  height: 1px;
 }
 
 /* 卡片通用样式 */
